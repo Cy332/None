@@ -1,0 +1,416 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>智慧健康IoT檢測</title>
+  <!-- Chart.js CDN -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    :root{
+      --bg: #e8f4ff;
+      --nav: #0b3d91;
+      --card: #ffffff;
+      --muted: #6b7280;
+      --radius: 12px;
+      --gap: 16px;
+    }
+    html,body{height:100%;margin:0;font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Noto Sans TC', 'Helvetica Neue', Arial; background:var(--bg); color:#0f172a}
+    .container{max-width:1100px;margin:28px auto;padding:20px}
+    .topbar{background:var(--nav);color:#fff;padding:18px;border-radius:12px 12px 8px 8px;display:flex;align-items:center;justify-content:space-between}
+    .title{font-size:20px;font-weight:700}
+    .patient{font-size:14px; margin-top:8px; color: #e6eefc}
+    .menu-btn{background:transparent;border:1px solid rgba(255,255,255,0.16);color:#fff;padding:8px 12px;border-radius:8px;cursor:pointer}
+    .menu{position:relative}
+    .menu-panel{position:absolute;right:0;top:46px;background:#fff;border-radius:10px;box-shadow:0 8px 20px rgba(11,61,145,0.12);padding:12px;display:none;min-width:220px}
+    .menu-panel.active{display:block}
+    .action-btn{display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:8px;border:none;cursor:pointer;width:100%;font-weight:600}
+    .a-urgent{background:#ff3b30;color:#fff} .a-drip{background:#ff9500;color:#fff} .a-leak{background:#ffcc00;color:#1f2937}
+    .a-fix{background:#0ea5e9;color:#fff} .a-toilet{background:#10b981;color:#fff} .a-clean{background:#6b7280;color:#fff}
+
+    .data-panel{background:linear-gradient(180deg, rgba(255,255,255,0.6), rgba(255,255,255,0.5));border-radius:12px;padding:14px;margin-top:14px}
+    .patient-vitals{display:flex;gap:16px;align-items:center;font-size:15px;color:#08306b}
+    .bmi-good{color: #059669; font-weight:700}
+    .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:var(--gap);margin-top:12px}
+    .card{background:var(--card);border-radius:var(--radius);padding:12px;box-shadow:0 6px 18px rgba(16,24,40,0.06);display:flex;flex-direction:column;gap:8px;cursor:pointer}
+    .card h3{margin:0;font-size:14px;color:#0f172a}
+    .value{font-size:28px;font-weight:700}
+    .meta{font-size:12px;color:var(--muted)}
+    .abnormal{color:#dc2626;font-weight:800}
+    .normal{color:#0f172a}
+    .chart-wrap{margin-top:8px;padding:10px;background:linear-gradient(180deg, #fff, #f6fbff);border-radius:8px}
+    .hidden{display:none}
+    @media (max-width:560px){.patient-vitals{flex-direction:column;align-items:flex-start}}
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="topbar">
+      <div>
+        <div class="title">智慧健康Iot檢測</div>
+        <div id="patient-info" style="display:flex; align-items:center; gap:10px;"></div>
+
+      </div>
+
+      <div class="menu">
+        <button class="menu-btn" id="menuToggle">功能選單 ▾</button>
+        <div class="menu-panel" id="menuPanel" aria-hidden="true">
+          <button class="action-btn a-urgent" data-action="urgent">緊急呼叫</button>
+          <button class="action-btn a-drip" data-action="change_drip">更換點滴</button>
+          <button class="action-btn a-leak" data-action="drip_leak">點滴漏針</button>
+          <button class="action-btn a-fix" data-action="repair">修報通知</button>
+          <button class="action-btn a-toilet" data-action="toilet">如廁協助</button>
+          <button class="action-btn a-clean" data-action="clean">環境清潔</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="data-panel">
+      <div class="patient-vitals">
+        <div>身高：<b id="height">178</b> cm</div>
+        <div>體重：<b id="weight">64</b> kg</div>
+        <div>BMI：<b id="bmi" class="bmi-good">20.2</b></div>
+        <div id="bmi_note" class="bmi-good">健康體重！</div>
+      </div>
+
+      <div class="grid" id="cards">
+        <!-- 卡片：pulse, spo2, temp, bp_sys, bp_dia, other -->
+        <div class="card" data-key="pulse"><h3>脈搏 (bpm)</h3><div class="value" id="pulse">--</div><div class="meta">異常：低於60或高於100顯示紅色</div></div>
+        <div class="card" data-key="spo2"><h3>血氧 SpO₂ (%)</h3><div class="value" id="spo2">--</div><div class="meta">異常：低於90顯示紅色</div></div>
+        <div class="card" data-key="temperature"><h3>體溫 (°C)</h3><div class="value" id="temp">--</div><div class="meta">異常：低於36.0或高於38.0顯示紅色</div></div>
+        <div class="card" data-key="bp_sys"><h3>血壓 (mmHg) - 收縮壓</h3><div class="value" id="bp_sys">--</div><div class="meta">異常：低於90或高於120顯示紅色</div></div>
+        <div class="card" data-key="bp_dia"><h3>血壓 (mmHg) - 舒張壓</h3><div class="value" id="bp_dia">--</div><div class="meta">異常：低於50或高於80顯示紅色</div></div>
+      </div>
+    </div>
+
+    <div class="foot"></div>
+  </div>
+
+<script>
+// 1. 載入基本資料
+  (function loadPatient() {
+  const name = localStorage.getItem("patient_name") || "未知";
+  const gender = localStorage.getItem("patient_gender") || "未知";
+  const birth = localStorage.getItem("patient_birth") || "";
+  const idno = localStorage.getItem("patient_id") || "";
+
+  document.getElementById("patient-info").innerHTML = `
+    病患：${name} ｜ 性別：${gender} ｜ 出生年月日：${birth} ｜ 身分證：${idno}
+    <button id="edit-info-btn" style="
+        padding: 4px 10px;
+        margin-left: 10px;
+        cursor: pointer;
+        background-color: #007bff;
+        color: white;
+        border: none;
+        border-radius: 4px;
+    ">修改</button>
+  `;
+
+  // ⭐ 設定按鈕點擊事件
+  document.getElementById("edit-info-btn").addEventListener("click", () => {
+  localStorage.setItem("edit_mode", "info");
+  window.location.href = "http://localhost:8080";
+  });
+})();
+
+
+
+// 2. 狀態物件
+const state = {
+  pulse: 78,
+  spo2: 97,
+  temperature: 36.5,
+  bp_sys: 118,
+  bp_dia: 76,
+  height: null,
+  weight: null,
+};
+
+// 3. 載入身高體重
+(function loadHW() {
+  const patient = JSON.parse(localStorage.getItem("patient_data") || "{}");
+
+  if (patient.height) {
+    state.height = patient.height;
+    document.getElementById("height").innerText = patient.height;
+  }
+  if (patient.weight) {
+    state.weight = patient.weight;
+    document.getElementById("weight").innerText = patient.weight;
+  }
+
+  calcBMI();
+  renderValues();
+})();
+
+// 4. BMI 計算（獨立成函式）
+function calcBMI() {
+  if (!state.height || !state.weight) return;
+
+  const h = state.height / 100;
+  const bmi = (state.weight / (h * h)).toFixed(1);
+
+  document.getElementById("bmi").innerText = bmi;
+  state.bmi = bmi;
+}
+
+// 5. 重繪畫面（呼叫這個就會刷新）
+function renderValues() {
+  document.getElementById("pulse").innerText = state.pulse;
+  document.getElementById("spo2").innerText = state.spo2;
+  document.getElementById("temp").innerText = state.temperature;
+  if (state.bmi) {
+    document.getElementById("bmi").innerText = state.bmi;
+  }
+}
+
+/* -----------------------
+   Chart 管理：在需要時建立 chart，並儲存到 charts 物件
+   ----------------------- */
+const charts = {}; // charts[key] = {chart: ChartInstance, canvasEl, containerEl}
+
+function createChartFor(key){
+  if(charts[key]) return charts[key];
+  // container：在卡片底下建立一個 div 放 canvas
+  const card = document.querySelector(`.card[data-key="${key}"]`);
+  const wrap = document.createElement('div');
+  wrap.className = 'chart-wrap';
+  const canvas = document.createElement('canvas');
+  wrap.appendChild(canvas);
+  card.appendChild(wrap); // 直接置於卡片底部
+  // 準備 datasets / labels
+  const cfg = {
+    type: 'line',
+    data: {
+      labels: buffers[key].map(p=>p.t.toLocaleTimeString()),
+      datasets: [{
+        label: key,
+        data: buffers[key].map(p=>p.v),
+        fill: false,
+        tension: 0.25,
+        borderWidth: 2,
+        pointRadius: 0
+      }]
+    },
+    options: {
+      animation: false,
+      responsive: true,
+      maintainAspectRatio: false,
+      scales: {
+        x: { display: true, ticks: { maxRotation: 0, autoSkip: true } },
+        y: { display: true }
+      },
+      plugins: { legend: { display: false } }
+    }
+  };
+  // 高度控制
+  canvas.style.width = '100%';
+  canvas.style.height = '160px';
+  const ctx = canvas.getContext('2d');
+  const chart = new Chart(ctx, cfg);
+  charts[key] = {chart, canvasEl: canvas, containerEl: wrap};
+  return charts[key];
+}
+
+function destroyChartFor(key){
+  const obj = charts[key];
+  if(!obj) return;
+  try{ obj.chart.destroy(); }catch(e){}
+  if(obj.containerEl && obj.containerEl.parentNode) obj.containerEl.parentNode.removeChild(obj.containerEl);
+  delete charts[key];
+}
+
+/* -----------------------
+   UI 更新：數值顯示與異常紅字
+   ----------------------- */
+function renderValues(){
+  // pulse
+  const pulseEl = document.getElementById('pulse');
+  pulseEl.innerText = state.pulse;
+  pulseEl.className = (state.pulse>100 || state.pulse<60) ? 'abnormal' : '';
+
+  // spo2
+  const spo2El = document.getElementById('spo2');
+  spo2El.innerText = state.spo2;
+  spo2El.className = (state.spo2<90) ? 'abnormal' : '';
+
+  // temp
+  const tempEl = document.getElementById('temp');
+  tempEl.innerText = state.temperature.toFixed(1);
+  tempEl.className = (state.temperature>38.0 || state.temperature<36.0) ? 'abnormal' : '';
+
+  // bp sys/dia
+  const sysEl = document.getElementById('bp_sys');
+  sysEl.innerText = state.bp_sys;
+  sysEl.className = (state.bp_sys>120 || state.bp_sys<90) ? 'abnormal' : '';
+  const diaEl = document.getElementById('bp_dia');
+  diaEl.innerText = state.bp_dia;
+  diaEl.className = (state.bp_dia>80 || state.bp_dia<50) ? 'abnormal' : '';
+
+
+  // BMI
+  const h = Number(document.getElementById('height').innerText) / 100.0;
+  const w = Number(document.getElementById('weight').innerText);
+  const bmi = w / (h*h);
+  const bmiEl = document.getElementById('bmi');
+  bmiEl.innerText = bmi.toFixed(1);
+  const note = document.getElementById('bmi_note');
+  if(bmi >= 18.5 && bmi < 25){
+    bmiEl.className = 'bmi-good'; note.className = 'bmi-good'; note.innerText = '健康體重！';
+  } else { bmiEl.className=''; note.className=''; note.innerText=''; }
+}
+
+/* -----------------------
+   點擊卡片：展開 / 收合 chart
+   ----------------------- */
+document.querySelectorAll('.card').forEach(card=>{
+  card.addEventListener('click', (e)=>{
+    const key = card.dataset.key;
+    // ignore clicks on menu etc.
+    if(!key || key==='other') return;
+    const existing = charts[key];
+    if(existing){
+      // collapse
+      destroyChartFor(key);
+      return;
+    }
+    // create chart and immediately render current buffer
+    createChartFor(key);
+    updateChartFor(key); // initial draw
+  });
+});
+
+/* -----------------------
+   更新 Chart 的函式（將 buffers 的資料刷新到 chart）
+   ----------------------- */
+function updateChartFor(key){
+  const obj = charts[key];
+  if(!obj) return;
+  const chart = obj.chart;
+  chart.data.labels = buffers[key].map(p=>p.t.toLocaleTimeString());
+  chart.data.datasets[0].data = buffers[key].map(p=>p.v);
+  chart.update('none');
+}
+
+/* -----------------------
+   當收到新資料時：更新 state、buffers、UI、並 update open charts
+   ----------------------- */
+function onNewMeasurement(payload){
+  // payload may contain various keys; update those present
+  const map = {
+    pulse: 'pulse',
+    spo2: 'spo2',
+    temperature: 'temperature',
+    temp_c: 'temperature',
+    bp_sys: 'bp_sys',
+    bp_dia: 'bp_dia',
+    height: 'height',
+    weight: 'weight'
+  };
+  for(const k in map){
+    if(payload[k] !== undefined){
+      state[map[k]] = Number(payload[k]);
+      // push to mapping buffers if relevant
+      if(buffers[map[k]] !== undefined) pushBuffer(map[k], Number(payload[k]));
+    }
+  }
+  // 保證 DOM 上的身高體重是一致（若 payload 有 height/weight）
+  document.getElementById('height').innerText = state.height;
+  document.getElementById('weight').innerText = state.weight;
+  renderValues();
+  // update charts that are open
+  for(const key of Object.keys(charts)){
+    updateChartFor(key);
+  }
+}
+
+/* -----------------------
+   WebSocket 嘗試連線 / 或啟用本地 mock 更新
+   ----------------------- */
+(function tryConnectWS(){
+  let wsUrl = (location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + '/ws';
+  let ws;
+  try{ ws = new WebSocket(wsUrl); }catch(e){ ws = null; }
+  if(!ws){
+    // no ws: start mock updates locally (3s)
+    startLocalMock();
+    return;
+  }
+  ws.onopen = ()=>{ console.log('WebSocket 已連線：', wsUrl); renderValues(); };
+  ws.onmessage = (evt)=>{
+    try{
+      const obj = JSON.parse(evt.data);
+      const payload = obj.payload || {};
+      onNewMeasurement(payload);
+    }catch(e){ console.warn('WS parse error', e); }
+  };
+  ws.onclose = ()=>{ console.log('WebSocket 已關閉，啟動本地 mock'); startLocalMock(); };
+  ws.onerror = (e)=>{ console.log('WebSocket error', e); ws.close(); };
+
+  // 若太久沒收到資料，仍執行本地微幅模擬（但不覆寫真實 mqtt）
+  let lastRecv = Date.now();
+  ws.addEventListener('message', ()=>{ lastRecv = Date.now(); });
+  setInterval(()=>{
+    if(Date.now() - lastRecv > 5000){
+      localMockStep();
+    }
+  }, 3000);
+})();
+
+/* -----------------------
+   本地 mock（與 sensor 與後端 mock 行為一致）
+   ----------------------- */
+function randInt(min,max){ return Math.floor(Math.random()*(max-min+1))+min; }
+function clamp(v,min,max){ return Math.max(min, Math.min(max, v)); }
+
+function localMockStep(){
+  state.pulse = clamp(state.pulse + randInt(-6,6), 45, 120);
+  state.spo2  = clamp(state.spo2 + randInt(-2,2), 84, 99);
+  state.temperature = Math.round(clamp(Math.round(state.temperature*10)/10 + (Math.random()-0.5), 35.0, 39.0)*10)/10;
+  state.bp_sys = clamp(state.bp_sys + randInt(-10,10), 70, 139);
+  state.bp_dia = clamp(state.bp_dia + randInt(-3,3), 40, 89);
+
+  // push buffers
+  pushBuffer('pulse', state.pulse);
+  pushBuffer('spo2', state.spo2);
+  pushBuffer('temperature', state.temperature);
+  pushBuffer('bp_sys', state.bp_sys);
+  pushBuffer('bp_dia', state.bp_dia);
+
+  renderValues();
+  for(const key of Object.keys(charts)) updateChartFor(key);
+}
+
+function startLocalMock(){
+  // 每3秒產生一次
+  localMockStep();
+  setInterval(localMockStep, 3000);
+}
+
+/* -----------------------
+   action menu
+   ----------------------- */
+document.getElementById('menuToggle').addEventListener('click', ()=>{
+  const p = document.getElementById('menuPanel');
+  p.classList.toggle('active');
+});
+
+/* right-top action buttons */
+document.querySelectorAll('.action-btn').forEach(btn=>{
+  btn.addEventListener('click', async (e)=>{
+    e.stopPropagation();
+    const action = btn.dataset.action;
+    try{
+      await fetch('/api/action', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({action})});
+      btn.blur();
+      alert('已觸發：' + btn.innerText);
+    }catch(err){
+      alert('按鈕觸發（離線模式）：' + btn.innerText);
+    }
+  });
+});
+
+</script>
+</body>
+</html>
