@@ -48,23 +48,35 @@ def get_last_mqtt_ts():
     with last_mqtt_lock:
         return last_mqtt_ts
 
+import logging
+logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
+
 def broadcaster():
-    """從 inbox 取出字串，送到所有 WebSocket client"""
+    """從 inbox 取出字串，送到所有 WebSocket client；並打印 debug 日誌"""
+    sent_counter = 0
     while True:
         try:
             msg = inbox.get(timeout=0.1)
         except queue.Empty:
             gsleep(0.05)
             continue
+
+        # log message arrival
+        logging.info(f"[broadcaster] pop inbox msg (len sockets={len(sockets)}) -> {msg[:120]!r}")
+
         dead = []
         for ws in list(sockets):
             try:
-                # msg 已是字串 (JSON)，直接發送
                 ws.send(msg)
-            except Exception:
+                sent_counter += 1
+                logging.debug(f"[broadcaster] sent to ws {id(ws)} (total sent {sent_counter})")
+            except Exception as e:
+                logging.warning(f"[broadcaster] send failed to ws {id(ws)} -> {e}")
                 dead.append(ws)
         for ws in dead:
             sockets.discard(ws)
+            logging.info(f"[broadcaster] removed dead ws {id(ws)}; now sockets={len(sockets)}")
+
 
 # 啟動 broadcaster（gevent）
 gspawn(broadcaster)
@@ -219,19 +231,25 @@ def ws():
     if not wsock:
         abort(400, "Expected WebSocket")
 
-    # 新增到 sockets 集合
     sockets.add(wsock)
+    logging.info(f"[ws] client connected: {id(wsock)} (total {len(sockets)})")
     try:
-        # 這裡僅保持連線，若前端送訊息可在這處理
         while True:
+            # non-blocking receive — we only keep the socket alive
             msg = wsock.receive()
             if msg is None:
+                logging.info(f"[ws] client {id(wsock)} closed connection.")
                 break
-            # 可以處理前端發來的訊息（如心跳等）
-    except WebSocketError:
-        pass
+            # Optional: log if client sent something
+            logging.debug(f"[ws] received from client {id(wsock)}: {msg}")
+    except WebSocketError as e:
+        logging.warning(f"[ws] WebSocketError for {id(wsock)}: {e}")
+    except Exception as e:
+        logging.exception(f"[ws] Exception for {id(wsock)}: {e}")
     finally:
         sockets.discard(wsock)
+        logging.info(f"[ws] client removed: {id(wsock)} (total {len(sockets)})")
+
 
 # 新增一個 API：當使用者按下右上按鈕會 POST 到這裡
 @app.post("/api/action")
