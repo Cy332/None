@@ -71,6 +71,11 @@
         <div>體重：<b id="weight">64</b> kg</div>
         <div>BMI：<b id="bmi" class="bmi-good">20.2</b></div>
         <div id="bmi_note" class="bmi-good">健康體重！</div>
+        <button id="edit-hw-btn"
+          style="padding:4px 10px; margin-left:10px; cursor:pointer;
+             background:#0a65cc; color:white; border:none; border-radius:6px;">
+            修改
+         </button>
       </div>
 
       <div class="grid" id="cards">
@@ -87,6 +92,25 @@
   </div>
 
 <script>
+  // ★★★ 新增：用來儲存歷史資料給 Chart 用 ★★★
+const buffers = {
+  pulse: [],
+  spo2: [],
+  temperature: [],
+  bp_sys: [],
+  bp_dia: []
+};
+
+// ★★★ 新增：推入歷史資料（最多儲存 40 筆） ★★★
+function pushBuffer(key, value){
+  const arr = buffers[key];
+  if(!arr) return;
+  arr.push({ t: new Date(), v: value });
+  if(arr.length > 40){
+    arr.shift();   // 保持 40 筆，避免記憶體不斷累積
+  }
+}
+
 // 1. 載入基本資料
   (function loadPatient() {
   const name = localStorage.getItem("patient_name") || "未知";
@@ -114,6 +138,13 @@
   });
 })();
 
+document.getElementById("edit-hw-btn").addEventListener("click", () => {
+    // 表示接下來要修改的是身高體重
+    localStorage.setItem("edit_mode", "height_weight");
+
+    // 前往第二頁
+    window.location.href = "http://localhost:8080/input2";
+});
 
 
 // 2. 狀態物件
@@ -155,15 +186,6 @@ function calcBMI() {
   state.bmi = bmi;
 }
 
-// 5. 重繪畫面（呼叫這個就會刷新）
-function renderValues() {
-  document.getElementById("pulse").innerText = state.pulse;
-  document.getElementById("spo2").innerText = state.spo2;
-  document.getElementById("temp").innerText = state.temperature;
-  if (state.bmi) {
-    document.getElementById("bmi").innerText = state.bmi;
-  }
-}
 
 /* -----------------------
    Chart 管理：在需要時建立 chart，並儲存到 charts 物件
@@ -329,14 +351,20 @@ function onNewMeasurement(payload){
    WebSocket 嘗試連線 / 或啟用本地 mock 更新
    ----------------------- */
 (function tryConnectWS(){
-  let wsUrl = (location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + '/ws';
+  const hostname = location.hostname; // 更穩定：不含 port
+  const port = location.port || (location.protocol === 'https:' ? '443' : '80');
+  const proto = (location.protocol === 'https:' ? 'wss://' : 'ws://');
+  const wsUrl = proto + hostname + ":" + port + '/ws';
+  console.log('嘗試連 WebSocket ->', wsUrl);
+
   let ws;
-  try{ ws = new WebSocket(wsUrl); }catch(e){ ws = null; }
+  try{ ws = new WebSocket(wsUrl); }catch(e){ console.warn('WebSocket 建構失敗', e); ws = null; }
   if(!ws){
-    // no ws: start mock updates locally (3s)
+    console.warn('WebSocket 不可用，改用本地模擬');
     startLocalMock();
     return;
   }
+
   ws.onopen = ()=>{ console.log('WebSocket 已連線：', wsUrl); renderValues(); };
   ws.onmessage = (evt)=>{
     try{
@@ -345,10 +373,10 @@ function onNewMeasurement(payload){
       onNewMeasurement(payload);
     }catch(e){ console.warn('WS parse error', e); }
   };
-  ws.onclose = ()=>{ console.log('WebSocket 已關閉，啟動本地 mock'); startLocalMock(); };
-  ws.onerror = (e)=>{ console.log('WebSocket error', e); ws.close(); };
+  ws.onclose = ()=>{ console.warn('WebSocket 已關閉，啟動本地 mock'); startLocalMock(); };
+  ws.onerror = (e)=>{ console.error('WebSocket error', e); /* 不要先關閉，讓 onclose 處理 */ };
 
-  // 若太久沒收到資料，仍執行本地微幅模擬（但不覆寫真實 mqtt）
+  // keep-last-recv logic
   let lastRecv = Date.now();
   ws.addEventListener('message', ()=>{ lastRecv = Date.now(); });
   setInterval(()=>{
@@ -357,6 +385,7 @@ function onNewMeasurement(payload){
     }
   }, 3000);
 })();
+
 
 /* -----------------------
    本地 mock（與 sensor 與後端 mock 行為一致）
