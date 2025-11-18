@@ -4,6 +4,7 @@
   <meta charset="utf-8">
   <title>輸入身高體重</title>
   <meta name="viewport" content="width=device-width, initial-scale=1">
+
   <style>
     body{
       font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Noto Sans TC';
@@ -39,39 +40,51 @@
     }
   </style>
 </head>
-<body>
 
+<body>
 <div class="card">
   <h2>請輸入身高與體重</h2>
 
   <label>身高（cm）</label>
-  <input type="number" id="height" placeholder="例如：180" />
+  <input type="number" id="hw_height" placeholder="例如：180" autocomplete="off" />
 
   <label>體重（kg）</label>
-  <input type="number" id="weight" placeholder="例如：70" />
+  <input type="number" id="hw_weight" placeholder="例如：70" autocomplete="off" />
 
-  <button onclick="next()">儲存</button>
+  <button onclick="saveHW()">儲存</button>
 </div>
 
 <script>
-function next(){
-  const h = Number(document.getElementById("height").value);
-  const w = Number(document.getElementById("weight").value);
+// 儲存資料
+function saveHW(){
+  const h = Number(document.getElementById("hw_height").value);
+  const w = Number(document.getElementById("hw_weight").value);
 
   if(!h || !w){
     alert("請輸入完整資料");
     return;
   }
 
-  // 儲存到 localStorage
-  const data = JSON.parse(localStorage.getItem("patient_data")) || {};
+  const data = JSON.parse(localStorage.getItem("patient_data") || "{}");
   data.height = h;
   data.weight = w;
+
   localStorage.setItem("patient_data", JSON.stringify(data));
 
-  // 跳轉 dashboard
   window.location.href = "/dashboard";
 }
+
+// 載入原本資料
+(function loadHW(){
+  const data = JSON.parse(localStorage.getItem("patient_data") || "{}");
+
+  if(data.height){
+    document.getElementById("hw_height").value = data.height;
+  }
+  if(data.weight){
+    document.getElementById("hw_weight").value = data.weight;
+  }
+})();
 </script>
 
 </body>
