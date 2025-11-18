@@ -1,0 +1,115 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<title>病患資料輸入</title>
+<style>
+  body{
+    font-family: -apple-system, BlinkMacSystemFont, 'Noto Sans TC';
+    background:#e8f4ff;
+    display:flex;
+    justify-content:center;
+    align-items:center;
+    height:100vh;
+    margin:0;
+  }
+  .box{
+    background:white;
+    padding:24px 32px;
+    border-radius:12px;
+    width:320px;
+    box-shadow:0 6px 18px rgba(0,0,0,0.1);
+  }
+  h2{margin-top:0;text-align:center;}
+  .input{margin-bottom:14px;}
+  label{font-weight:600;}
+  input,select{
+    width:100%;padding:8px;border-radius:6px;border:1px solid #ccc;margin-top:4px;
+  }
+  button{
+    width:100%;padding:10px;background:#0b5ed7;color:white;border:none;
+    font-size:16px;border-radius:6px;cursor:pointer;margin-top:14px;
+  }
+</style>
+</head>
+<body>
+<div class="box">
+  <h2>請輸入病患資料</h2>
+
+  <div class="input">
+    <label>姓名：</label>
+    <input id="name" type="text">
+  </div>
+
+  <div class="input">
+    <label>性別：</label>
+    <select id="gender">
+      <option value="男">男</option>
+      <option value="女">女</option>
+    </select>
+  </div>
+
+  <div class="input">
+    <label>出生年月日：</label>
+    <input id="birth" type="date">
+  </div>
+
+  <div class="input">
+    <label>身分證字號：</label>
+    <input id="idno" type="text">
+  </div>
+
+  <button onclick="go()">儲存</button>
+</div>
+
+<script>
+window.addEventListener("DOMContentLoaded", () => {
+  
+  const mode = localStorage.getItem("edit_mode");
+
+  if (mode === "info") {
+    // 只有在修改模式才帶入過去資料
+    document.getElementById("name").value   = localStorage.getItem("patient_name")   || "";
+    document.getElementById("gender").value = localStorage.getItem("patient_gender") || "";
+    document.getElementById("birth").value  = localStorage.getItem("patient_birth")  || "";
+    document.getElementById("idno").value   = localStorage.getItem("patient_id")     || "";
+  } else {
+    // 新增時保持空白
+    document.getElementById("name").value   = "";
+    document.getElementById("gender").value = "男"; // 預設
+    document.getElementById("birth").value  = "";
+    document.getElementById("idno").value   = "";
+  }
+});
+function go(){
+  const name = document.getElementById('name').value.trim();
+  const gender = document.getElementById('gender').value;
+  const birth = document.getElementById('birth').value;
+  const idno = document.getElementById('idno').value.trim();
+
+  if(!name || !birth || !idno){
+    alert("請完整填寫所有欄位");
+    return;
+  }
+
+  // 儲存資料
+  localStorage.setItem("patient_name", name);
+  localStorage.setItem("patient_gender", gender);
+  localStorage.setItem("patient_birth", birth);
+  localStorage.setItem("patient_id", idno);
+
+  // 讀取模式（是否為修改）
+  const mode = localStorage.getItem("edit_mode");
+
+  if (mode === "info") {
+    // 🌟 修改模式 → 回 dashboard
+    localStorage.removeItem("edit_mode");
+    window.location.href = "/dashboard";
+  } else {
+    // 🌟 新增模式（第一次填）→ 去 input2
+    window.location.href = "/input2";
+  }
+}
+</script>
+</body>
+</html>
